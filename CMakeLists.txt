@@ -25,9 +25,11 @@ FetchContent_MakeAvailable(dotenv)
 # ---------- core shared library ----------
 add_library(core
     src/exchange/BinanceWS.cpp
+    src/strategy/MACrossStrategy.cpp
+    src/execution/ExecutionEngine.cpp
 )
 
-target_include_directories(core PUBLIC include/)
+target_include_directories(core PUBLIC include/ ${dotenv_SOURCE_DIR}/include)
 
 target_link_libraries(core PUBLIC
     Boost::system
