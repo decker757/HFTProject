@@ -22,7 +22,6 @@ private:
     ssl::context ctx {ssl::context::tlsv12_client};
     tcp::resolver resolver;
     beast::ssl_stream<beast::tcp_stream> stream;
-    long long ts;
 
     std::string API_KEY;
     std::string SECRET_KEY;

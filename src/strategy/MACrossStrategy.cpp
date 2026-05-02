@@ -46,7 +46,7 @@ Signal MACrossStrategy::update(Trade t) {
 
 double MACrossStrategy::calculateSMA() {
     double SMA = 0.0;
-    for (int i = cb.size() - 1; i >= cb.size() - SMA_DAYS; i--) SMA += cb[i].price;
+    for (int i = (int)cb.size() - 1; i >= (int)cb.size() - SMA_DAYS; i--) SMA += cb[i].price;
     SMA = SMA / SMA_DAYS;
     return SMA;
 }
