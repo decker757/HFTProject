@@ -8,11 +8,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(APPLE)
     set(BOOST_ROOT /opt/homebrew/opt/boost)
     set(OPENSSL_ROOT_DIR /opt/homebrew/opt/openssl@3)
+    set(PostgreSQL_ROOT /opt/homebrew/opt/postgresql@18)
 endif()
 
 find_package(Boost REQUIRED COMPONENTS system thread)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(PostgreSQL REQUIRED)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -27,6 +29,7 @@ add_library(core
     src/exchange/BinanceWS.cpp
     src/strategy/MACrossStrategy.cpp
     src/execution/ExecutionEngine.cpp
+    src/market_data/MarketDataStore.cpp
 )
 
 target_include_directories(core PUBLIC include/ ${dotenv_SOURCE_DIR}/include)
@@ -37,6 +40,7 @@ target_link_libraries(core PUBLIC
     OpenSSL::SSL
     OpenSSL::Crypto
     nlohmann_json::nlohmann_json
+    PostgreSQL::PostgreSQL
 )
 
 # ---------- apps ----------
