@@ -8,18 +8,18 @@
 std::atomic<bool> running{true};
 
 int main() {
-    TradeQueue queue;
-    BinanceWS ws(queue);
+    TradeQueue queueBTC;
+    BinanceWS wsBTC(queueBTC, "btcusdt");
     MarketDataStore dataStore("127.0.0.1", 5432, "market_data", "market_user", "root");
 
-    std::thread wsThread([&] () {
-        ws.connect("stream.binance.com", "443", "/ws/btcusdt@trade");
+    std::thread wsBTCThread([&] () {
+        wsBTC.connect("stream.binance.com", "443");
     });
 
     std::thread updateThread([&] () {
         while (running.load(std::memory_order_relaxed)) {
             Trade latestTrade;
-            if (queue.pop(latestTrade)) {
+            if (queueBTC.pop(latestTrade)) {
                 dataStore.updateDB(latestTrade);
             } else {
                 std::this_thread::yield();
@@ -27,9 +27,8 @@ int main() {
         }
     });
 
-    if (wsThread.joinable()) wsThread.join();
+    if (wsBTCThread.joinable()) wsBTCThread.join();
     if (updateThread.joinable()) updateThread.join();
-
 
     return 0;
 }

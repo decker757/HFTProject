@@ -1,13 +1,16 @@
 #include <nlohmann/json.hpp>
+#include <string.h>
 #include "exchange/BinanceWS.h"
 #include "market_data/Trade.h"
 
 
-BinanceWS::BinanceWS(TradeQueue& queue) : queue_(queue), ssl_ctx_(net::ssl::context::tlsv12_client), ws_(net::make_strand(ioc_), ssl_ctx_){
+BinanceWS::BinanceWS(TradeQueue& queue, const std::string& symbol) : queue_(queue), symbol_(symbol), ssl_ctx_(net::ssl::context::tlsv12_client), ws_(net::make_strand(ioc_), ssl_ctx_) {
 
 }
 
-void BinanceWS::connect(const std::string& host, const std::string& port, const std::string& stream) {
+void BinanceWS::connect(const std::string& host, const std::string& port) {
+    std::string stream = "/ws/" + symbol_ + "@trade";
+
     tcp::resolver resolver(ioc_);
     auto endpoints = resolver.resolve(host, port);
 

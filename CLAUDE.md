@@ -13,14 +13,14 @@ This project is a personal learning exercise. When the user asks questions about
 
 ## Build
 
-Requires macOS with Homebrew-installed dependencies: Boost, OpenSSL 3, nlohmann_json.
+Requires macOS with Homebrew-installed dependencies: Boost, OpenSSL 3, nlohmann_json, postgresql@18.
 
 ```bash
 cmake -S . -B build
 cmake --build build
 ```
 
-Executables are placed in `build/apps/{trader,recorder,replayer}/`.
+Executables are placed in `build/{trader,recorder,replayer}`.
 
 Run individual targets:
 ```bash
@@ -31,9 +31,11 @@ cmake --build build --target replayer
 
 ## Architecture
 
-This is a cryptocurrency trading system framework targeting Binance. Three applications share a common `libcore` shared library built from `src/exchange/BinanceWS.cpp`.
+This is a cryptocurrency trading system framework targeting Binance. Three applications share a common `libcore` static library.
 
-**Data flow:** `BinanceWS` connects to Binance WebSocket stream → parses JSON trade messages → pushes `Trade` structs into `SPSCQueue` (Boost lock-free, capacity 1024) → consumer thread reads from queue.
+**Data flow (trader):** `BinanceWS` connects to Binance WebSocket stream → parses JSON trade messages → pushes `Trade` structs into `SPSCQueue` → consumer thread reads from queue → `MACrossStrategy::update()` returns `Signal` → `ExecutionEngine::executeOrder()` posts order to Binance testnet.
+
+**Data flow (recorder):** `BinanceWS` → `SPSCQueue` → consumer thread → `MarketDataStore::updateDB()` → Postgres `trades` table.
 
 **Key types:**
 - `Trade` (`include/market_data/Trade.h`) — symbol, price, quantity, timestamp (ms), is_sell
@@ -41,32 +43,40 @@ This is a cryptocurrency trading system framework targeting Binance. Three appli
 - `BinanceWS` (`include/exchange/BinanceWS.h`) — Boost.Beast WebSocket over SSL; takes a `TradeQueue&` in its constructor; `connect()` blocks in an infinite read loop
 
 **Applications:**
-- `apps/trader/` — live BTCUSDT stream from `stream.binance.com:443/ws/btcusdt@trade` (implemented)
-- `apps/recorder/` — stub for persisting trade data
-- `apps/replayer/` — stub for replaying historical data
+- `apps/trader/main.cpp` — multi-symbol trader (in progress); `BinanceWS` now takes a `symbol` param; 4 symbols (BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT) each get their own `BinanceWS`, `TradeQueue`, and WS thread; consumer threads not yet wired up per-symbol
+- `apps/recorder/main.cpp` — live BTCUSDT stream; persists trades to Postgres via `MarketDataStore` (done)
+- `apps/replayer/main.cpp` — stub for replaying historical data from Postgres (not yet implemented)
 
-**Strategy engine (in progress):**
-- `include/core/Signal.h` — `enum class Signal { Buy, Sell, Hold }` (done)
-- `include/strategy/StrategyBase.h` — abstract base class with pure virtual `Signal update(Trade)` and virtual destructor (done)
-- `include/strategy/MACrossStrategy.h` — concrete subclass; owns `boost::circular_buffer<Trade> cb` and `bool prev_sma_above_lma` (done)
-- `src/strategy/MACrossStrategy.cpp` — constructor initializes `cb(capacity)` and `prev_sma_above_lma(false)`; `update(Trade t)` body in progress
+**Strategy engine (done):**
+- `include/core/Signal.h` — `enum class Signal { BUY, SELL, HOLD }`
+- `include/strategy/StrategyBase.h` — abstract base class with pure virtual `Signal update(Trade)` and virtual destructor
+- `include/strategy/MACrossStrategy.h` — concrete subclass; owns `boost::circular_buffer<Trade> cb` and `bool prev_sma_above_lma`
+- `src/strategy/MACrossStrategy.cpp` — fully implemented; `SMA_DAYS = 5`, `LMA_DAYS = 20`; computes crossover and returns `Signal`
 
-**Strategy engine design decisions:**
-- `main` owns all SPSC queues, passes references to both the aggregator thread and each strategy
-- Aggregator thread fans out incoming trades from `BinanceWS` to per-strategy SPSC queues (one queue per strategy)
-- Each strategy maintains its own `boost::circular_buffer` sized to the LMA period
-- MA crossover detection uses a single `bool prev_sma_above_lma` — flips when SMA/LMA relationship changes between ticks
-- `Signal` returned from `update()` — `Hold` when buffer not yet full (warm-up period), `Buy`/`Sell` on crossover
-- Constants `SMA_DAYS = 5`, `LMA_DAYS = 20` defined at file scope in `MACrossStrategy.cpp`
+**Market data / persistence (done):**
+- `include/market_data/MarketDataStore.h` / `src/market_data/MarketDataStore.cpp` — wraps libpq; constructor connects to Postgres and creates `trades` table (`IF NOT EXISTS`); `updateDB(Trade)` inserts a row
+- Postgres database: `market_data`, user: `market_user`, table: `trades (id, symbol, price, quantity, is_sell, timestamp)`
 
-**Next steps for `MACrossStrategy::update()`:**
-1. Push incoming trade price into `cb`
-2. Guard with `cb.size() >= LMA_DAYS` before computing
-3. Compute SMA (average of last `SMA_DAYS` prices) and LMA (average of all `LMA_DAYS` prices)
-4. Compare current SMA vs LMA relationship to `prev_sma_above_lma` to detect crossover
-5. Update `prev_sma_above_lma` and return appropriate `Signal`
+**Execution engine (done):**
+- `include/execution/ExecutionEngine.h` / `src/execution/ExecutionEngine.cpp` — maintains persistent HTTPS connection to `testnet.binance.vision`; `executeOrder(Signal)` posts a signed market order (HMAC-SHA256); reads API key and secret from `.env`
 
-**Skeleton modules (not yet implemented):** `include/execution/`, `include/risk/`, `src/execution/`, `src/risk/`, `src/market_data/`, `tests/`
+**Risk module (not yet implemented):**
+- `include/risk/`, `src/risk/` — intended to sit between strategy and execution; evaluates `Signal` against current portfolio before passing to `ExecutionEngine`
+- Needs a `Portfolio` struct (current holdings, cash balance, max drawdown / risk limits)
+- Signal flow once implemented: `MACrossStrategy` → `RiskManager` → `ExecutionEngine`
+
+**Replayer (not yet implemented):**
+- `apps/replayer/main.cpp` — reads historical `Trade` rows from Postgres and feeds them through a strategy for backtesting
+- Needs a read interface on `MarketDataStore` (or a separate `MarketDataReader`)
+
+**Remaining work:**
+1. Multi-symbol trader wiring — per-symbol consumer threads, each with its own `MACrossStrategy` and `ExecutionEngine`
+2. Strategy evaluator — idea: an evaluator layer that selects which strategy to route a trade to based on market conditions, sits between queue consumer and strategy instances
+3. Additional strategies beyond `MACrossStrategy` (not yet decided)
+4. Risk module (`Portfolio` struct, `RiskManager` class)
+5. Replayer / backtesting infrastructure
+6. Kill switch (graceful shutdown signal handling in trader/recorder)
+7. Unit tests (`tests/` directory — empty)
 
 ## Dependencies
 
@@ -76,5 +86,7 @@ This is a cryptocurrency trading system framework targeting Binance. Three appli
 | Boost.Lockfree | `spsc_queue` for inter-thread trade passing |
 | OpenSSL 3 | TLS handshake with Binance |
 | nlohmann_json | JSON parsing of Binance trade messages |
+| libpq (postgresql@18) | Postgres client for `MarketDataStore` |
+| dotenv-cpp | Load API keys from `.env` file |
 
 C++20 required (`cmake_minimum_required VERSION 3.20`).

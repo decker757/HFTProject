@@ -95,6 +95,5 @@ void MarketDataStore::updateDB(Trade t) {
         PQclear(res);
         throw std::runtime_error("Insert failed: " + error);
     }
-
     PQclear(res);
 }
