@@ -69,14 +69,19 @@ This is a cryptocurrency trading system framework targeting Binance. Three appli
 - `apps/replayer/main.cpp` — reads historical `Trade` rows from Postgres and feeds them through a strategy for backtesting
 - Needs a read interface on `MarketDataStore` (or a separate `MarketDataReader`)
 
-**Remaining work:**
-1. Multi-symbol trader wiring — per-symbol consumer threads, each with its own `MACrossStrategy` and `ExecutionEngine`
-2. Strategy evaluator — idea: an evaluator layer that selects which strategy to route a trade to based on market conditions, sits between queue consumer and strategy instances
-3. Additional strategies beyond `MACrossStrategy` (not yet decided)
-4. Risk module (`Portfolio` struct, `RiskManager` class)
-5. Replayer / backtesting infrastructure
-6. Kill switch (graceful shutdown signal handling in trader/recorder)
-7. Unit tests (`tests/` directory — empty)
+## Roadmap
+
+**Phase 1 (complete):** Core trading system — live multi-symbol WebSocket streaming, strategy evaluation, order execution on Binance testnet.
+
+**Phase 2 (next):**
+1. Kill switch (graceful shutdown signal handling in trader/recorder)
+2. Risk module (`Portfolio` struct, `RiskManager` class)
+3. Replayer / backtesting infrastructure
+4. Unit tests (`tests/` directory — empty)
+5. Frontend dashboard
+
+**Phase 3:**
+- ML-driven strategy improvement using backtested data
 
 ## Dependencies
 
