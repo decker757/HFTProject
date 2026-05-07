@@ -33,8 +33,8 @@ void BinanceWS::connect(const std::string& host, const std::string& port) {
 
         queue_.push(t);
 
-        std::lock_guard<std::mutex> lock(coutMtx);
-        std::cout << t.symbol << " " << t.price << " " << t.quantity << "\n";
+        // std::lock_guard<std::mutex> lock(coutMtx);
+        // std::cout << t.symbol << " " << t.price << " " << t.quantity << "\n";
     }
 
 }

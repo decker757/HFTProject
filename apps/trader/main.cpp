@@ -5,9 +5,11 @@
 #include "strategy/MomentumStrategy.h"
 #include "strategy/RSIStrategy.h"
 #include "strategy/StrategyEvaluator.h"
+#include "core/Logging.h"
 
 #include <thread>
 #include <atomic>
+#include <unordered_set>
 
 std::atomic<bool> running{true};
 
@@ -19,6 +21,14 @@ int main() {
     BinanceWS wsXRP(queueXRP, "xrpusdt");
 
     ExecutionEngine exec;
+    auto balances = exec.getBalance();
+
+    // std::unordered_set<std::string> watchlist = {"USDT", "BTC", "ETH", "SOL", "XRP"};
+    // for (auto& [asset, free] : balances) {
+    //     if (watchlist.count(asset)) {
+    //         std::cout << asset << ": " << free << "\n";
+    //     }
+    // }
 
     auto makeConsumer = [&](TradeQueue& queue, const std::string& symbol) {
         std::string upperSymbol = symbol;
@@ -60,6 +70,22 @@ int main() {
     std::thread updateSOLThread = makeConsumer(queueSOL, "solusdt");
     std::thread updateXRPThread = makeConsumer(queueXRP, "xrpusdt");
 
+    std::thread balanceThread([&]() {
+        std::unordered_set<std::string> watchlist = {"USDT", "BTC", "ETH", "SOL", "XRP"};
+        while (running.load(std::memory_order_relaxed)) {
+            auto balances = exec.getBalance();
+            {
+                std::lock_guard<std::mutex> lock(coutMtx);
+                for (auto& [asset, free] : balances) {
+                    if (watchlist.count(asset)) {
+                        std::cout << asset << ": " << free << "\n";
+                    }
+                }
+            } // lock released here
+            std::this_thread::sleep_for(std::chrono::seconds(30));
+        }
+    });
+
     wsBTCThread.join();
     wsETHThread.join();
     wsSOLThread.join();
@@ -68,6 +94,7 @@ int main() {
     updateETHThread.join();
     updateSOLThread.join();
     updateXRPThread.join();
+    balanceThread.join();
 
     return 0;
 }

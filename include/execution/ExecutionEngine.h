@@ -21,10 +21,19 @@ using tcp = net::ip::tcp;
 
 class ExecutionEngine {
 private:
+
+    // account stream
+    net::io_context accountIoc;
+    ssl::context accountCtx{ssl::context::tlsv12_client};
+    beast::ssl_stream<beast::tcp_stream> accountStream;
+    std::mutex accountMtx_;
+
+    // order stream
     net::io_context ioc;
     ssl::context ctx {ssl::context::tlsv12_client};
     tcp::resolver resolver;
     beast::ssl_stream<beast::tcp_stream> stream;
+    std::mutex mtx_;
 
     std::string API_KEY;
     std::string SECRET_KEY;
@@ -38,9 +47,11 @@ private:
         {"XRPUSDT", "1"}
     };
 
-    std::mutex mtx_;
+    
     
 public:
     ExecutionEngine();
     void executeOrder(Signal, std::string currency);
+    void reconnect();
+    std::unordered_map<std::string, double> getBalance();
 };
