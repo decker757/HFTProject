@@ -1,63 +1,73 @@
 #include "exchange/BinanceWS.h"
-#include "strategy/MACrossStrategy.h"
 #include "execution/ExecutionEngine.h"
+#include "strategy/MACrossStrategy.h"
+#include "strategy/BollingerBandsStrategy.h"
+#include "strategy/MomentumStrategy.h"
+#include "strategy/RSIStrategy.h"
+#include "strategy/StrategyEvaluator.h"
 
 #include <thread>
 #include <atomic>
 
 std::atomic<bool> running{true};
 
-
 int main() {
-    TradeQueue queueBTC;
+    TradeQueue queueBTC, queueETH, queueSOL, queueXRP;
     BinanceWS wsBTC(queueBTC, "btcusdt");
-
-    TradeQueue queueETH;
     BinanceWS wsETH(queueETH, "ethusdt");
-
-    TradeQueue queueSOL;
     BinanceWS wsSOL(queueSOL, "solusdt");
-
-    TradeQueue queueXRP;
     BinanceWS wsXRP(queueXRP, "xrpusdt");
 
-    MACrossStrategy strat;
     ExecutionEngine exec;
-    
 
-    std::thread wsBTCThread([&] () {
-        wsBTC.connect("stream.binance.com", "443");
-    });
+    auto makeConsumer = [&](TradeQueue& queue, const std::string& symbol) {
+        std::string upperSymbol = symbol;
+        std::transform(upperSymbol.begin(), upperSymbol.end(), upperSymbol.begin(), ::toupper);
 
-    std::thread wsETHThread([&] () {
-        wsETH.connect("stream.binance.com", "443");
-    });
+        return std::thread([&exec, q = &queue, upperSymbol]() {
+            MACrossStrategy ma;
+            BollingerBandsStrategy bb;
+            MomentumStrategy mom;
+            RSIStrategy rsi;
 
-    std::thread wsSOLThread([&] () {
-        wsSOL.connect("stream.binance.com", "443");
-    });
+            StrategyEvaluator eval({
+                {StrategyType::MA_CROSS, &ma},
+                {StrategyType::BOLLINGER, &bb},
+                {StrategyType::MOMENTUM, &mom},
+                {StrategyType::RSI, &rsi}
+            });
 
-    std::thread wsXRPThread([&] () {
-        wsXRP.connect("stream.binance.com", "443");
-    });
-
-    std::thread updateThread([&] () {
-        while (running.load(std::memory_order_relaxed)) {
-            Trade latestTrade;
-            if (queueBTC.pop(latestTrade)) {
-                Signal sig = strat.update(latestTrade);
-                exec.executeOrder(sig);
-            } else {
-                std::this_thread::yield();
+            while (running.load(std::memory_order_relaxed)) {
+                Trade t;
+                if (q->pop(t)) {
+                    StrategyBase* strat = eval.select(t);
+                    Signal sig = strat->update(t);
+                    if (sig != Signal::HOLD) exec.executeOrder(sig, upperSymbol);
+                } else {
+                    std::this_thread::yield();
+                }
             }
-        }
-    });
+        });
+    };
 
-    if (wsBTCThread.joinable()) wsBTCThread.join();
-    if (wsETHThread.joinable()) wsETHThread.join();
-    if (wsSOLThread.joinable()) wsSOLThread.join();
-    if (wsXRPThread.joinable()) wsXRPThread.join();
-    if (updateThread.joinable()) updateThread.join();
+    std::thread wsBTCThread([&]() { wsBTC.connect("stream.binance.com", "443"); });
+    std::thread wsETHThread([&]() { wsETH.connect("stream.binance.com", "443"); });
+    std::thread wsSOLThread([&]() { wsSOL.connect("stream.binance.com", "443"); });
+    std::thread wsXRPThread([&]() { wsXRP.connect("stream.binance.com", "443"); });
+
+    std::thread updateBTCThread = makeConsumer(queueBTC, "btcusdt");
+    std::thread updateETHThread = makeConsumer(queueETH, "ethusdt");
+    std::thread updateSOLThread = makeConsumer(queueSOL, "solusdt");
+    std::thread updateXRPThread = makeConsumer(queueXRP, "xrpusdt");
+
+    wsBTCThread.join();
+    wsETHThread.join();
+    wsSOLThread.join();
+    wsXRPThread.join();
+    updateBTCThread.join();
+    updateETHThread.join();
+    updateSOLThread.join();
+    updateXRPThread.join();
 
     return 0;
-};
+}

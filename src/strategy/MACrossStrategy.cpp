@@ -20,20 +20,13 @@ MACrossStrategy::MACrossStrategy() : prev_sma_above_lma(false), cb(LMA_DAYS) {
 }
 
 Signal MACrossStrategy::update(Trade t) {
-    double SMA = 0.0;
-    double LMA = 0.0;
-
     cb.push_back(t);
+    if (cb.size() < LMA_DAYS) return Signal::HOLD;
 
-    if (cb.size() >= SMA_DAYS && cb.size() < LMA_DAYS) { // buffer does not have enough for LMA calculation.
-        SMA = calculateSMA();
-    }
-    else if (cb.size() == LMA_DAYS) { // SMA & LMA is possible to calculate
-        SMA = calculateSMA();
-        LMA = calculateLMA();
-    }
+    double SMA = calculateSMA();
+    double LMA = calculateLMA();
 
-    if (!prev_sma_above_lma && SMA > LMA) { 
+    if (!prev_sma_above_lma && SMA > LMA) {
         prev_sma_above_lma = true;
         return Signal::BUY;
     }
@@ -43,6 +36,7 @@ Signal MACrossStrategy::update(Trade t) {
     }
     return Signal::HOLD;
 }
+
 
 double MACrossStrategy::calculateSMA() {
     double SMA = 0.0;

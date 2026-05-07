@@ -8,16 +8,14 @@
 #include <boost/beast/version.hpp>
 
 #include "execution/ExecutionEngine.h"
-#include "strategy/MACrossStrategy.h"
 #include "core/Signal.h"
 #include "core/HMACSignature.h"
+#include "core/Logging.h"
 
 /*
     Execution Engine:
     1. Receive trade signal from the strategy engine(s)
     2. Execute it on binance test-net
-    3. 
-
 */
 
 namespace beast = boost::beast;
@@ -41,16 +39,15 @@ ExecutionEngine::ExecutionEngine() : resolver(ioc), stream(ioc, ctx) {
         beast::get_lowest_layer(stream).connect(results);
         SSL_set_tlsext_host_name(stream.native_handle(), HOST_URL.c_str());
         stream.handshake(ssl::stream_base::client);
-
-
-
     } catch (std::exception const& e) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
 
-void ExecutionEngine::executeOrder(Signal s) {
+void ExecutionEngine::executeOrder(Signal s, std::string currency) {
+    std::lock_guard<std::mutex> lock(mtx_);
     std::string sig = "";
+
     if (s == Signal::BUY) sig = "BUY";
     else if (s == Signal::SELL) sig = "SELL";
     else sig = "HOLD";
@@ -59,7 +56,12 @@ void ExecutionEngine::executeOrder(Signal s) {
         //Fresh timestamp
         long long ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         if (sig != "HOLD") {
-            std::string query = "symbol=BTCUSDT&side=" + sig +"&type=MARKET&quantity=0.001&timestamp=" + std::to_string(ts);
+            long long now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            if (now - lastOrderTime_[currency] < 1000) return;
+            lastOrderTime_[currency] = now;
+
+            std::string quantity = minQty.count(currency) ? minQty[currency] : "0.001";
+            std::string query = "symbol=" + currency + "&side=" + sig + "&type=MARKET&quantity=" + quantity + "&timestamp=" + std::to_string(ts);
             std::string signature = hmac_sha256(SECRET_KEY, query);
             std::string target = "/api/v3/order?" + query + "&signature=" + signature;
 
@@ -75,6 +77,7 @@ void ExecutionEngine::executeOrder(Signal s) {
             http::response<http::string_body> res;
             http::read(stream, buffer, res);
 
+            std::lock_guard<std::mutex> lock(coutMtx);
             std::cout << res.body() << std::endl;
         }
     } catch (std::exception const& e) {

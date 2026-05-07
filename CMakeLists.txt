@@ -26,8 +26,13 @@ FetchContent_MakeAvailable(dotenv)
 
 # ---------- core shared library ----------
 add_library(core
+    src/core/Logging.cpp
     src/exchange/BinanceWS.cpp
     src/strategy/MACrossStrategy.cpp
+    src/strategy/BollingerBandsStrategy.cpp
+    src/strategy/MomentumStrategy.cpp
+    src/strategy/RSIStrategy.cpp
+    src/strategy/StrategyEvaluator.cpp
     src/execution/ExecutionEngine.cpp
     src/market_data/MarketDataStore.cpp
 )
