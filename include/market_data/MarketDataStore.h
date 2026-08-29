@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <string.h>
 #include <libpq-fe.h>
 #include <stdexcept>

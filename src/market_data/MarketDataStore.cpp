@@ -73,7 +73,7 @@ void MarketDataStore::updateDB(Trade t) {
     std::string tsStr = std::to_string(t.timestamp);
 
     const char* paramValues[5];
-    paramValues[0] = t.symbol.c_str();
+    paramValues[0] = t.symbol;
     paramValues[1] = priceStr.c_str();
     paramValues[2] = qtyStr.c_str();
     paramValues[3] = isSellStr.c_str();
