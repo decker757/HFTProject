@@ -26,6 +26,42 @@ Three applications share a common `libcore` static library:
 
 `StrategyEvaluator` selects the active strategy per trade based on coefficient of variation and price deviation from the rolling mean.
 
+## Performance
+
+The order round trip runs on a dedicated sender thread (`OrderRouter`), so a
+strategy thread never blocks on the network. Market-data parsing happens
+directly out of the websocket read buffer with a hand-rolled scanner instead of
+a DOM parse.
+
+Measured with `./build/bench` (deterministic, no network, Apple Silicon, Release):
+
+| Parse path | ns/op |
+|---|---|
+| Original: buffer copy + nlohmann DOM + `std::stod` | ~1080 |
+| nlohmann DOM without the redundant copies | ~1080 |
+| Hand-rolled scan over the raw buffer | ~155 |
+
+Receipt to strategy signal, end to end in process: **p50 125 ns, p99 291 ns**
+over 200k trades.
+
+Worth noting what this says: removing the string copies changed nothing. The
+cost was nlohmann building a DOM node tree per message, and only replacing the
+parse moved the number.
+
+These are internal-path numbers. They are not tick-to-trade: the order path is
+a REST round trip to Binance over the public internet, which dominates
+everything above by four orders of magnitude.
+
+## Testing
+
+```bash
+cmake --build build --target test_parser
+cd build && ctest --output-on-failure
+```
+
+The fast parser is checked against the nlohmann reference parser on real
+payloads, and the decimal parser against `strtod`.
+
 ## Dependencies
 
 - Boost (Beast, Asio, Lockfree)

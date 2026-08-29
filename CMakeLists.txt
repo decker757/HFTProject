@@ -27,13 +27,16 @@ FetchContent_MakeAvailable(dotenv)
 # ---------- core shared library ----------
 add_library(core
     src/core/Logging.cpp
+    src/core/LatencyHistogram.cpp
     src/exchange/BinanceWS.cpp
+    src/exchange/TradeParser.cpp
     src/strategy/MACrossStrategy.cpp
     src/strategy/BollingerBandsStrategy.cpp
     src/strategy/MomentumStrategy.cpp
     src/strategy/RSIStrategy.cpp
     src/strategy/StrategyEvaluator.cpp
     src/execution/ExecutionEngine.cpp
+    src/execution/OrderRouter.cpp
     src/market_data/MarketDataStore.cpp
 )
 
@@ -49,7 +52,13 @@ target_link_libraries(core PUBLIC
 )
 
 # ---------- apps ----------
-foreach(APP recorder replayer trader)
+foreach(APP recorder replayer trader bench)
     add_executable(${APP} apps/${APP}/main.cpp)
     target_link_libraries(${APP} PRIVATE core dotenv)
 endforeach()
+
+# ---------- tests ----------
+enable_testing()
+add_executable(test_parser tests/test_parser.cpp)
+target_link_libraries(test_parser PRIVATE core)
+add_test(NAME parser COMMAND test_parser)
