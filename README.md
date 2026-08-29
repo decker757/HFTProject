@@ -1,4 +1,4 @@
-# HFT Trading System
+# C++ MultiThreaded Trading System
 
 A C++ cryptocurrency trading system targeting Binance. Streams live trade data from multiple symbols via Binance WebSocket, dynamically selects trading strategies, and executes orders on the Binance testnet.
 
